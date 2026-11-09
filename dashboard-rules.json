@@ -1,0 +1,16 @@
+{
+  "source_tab": "Grove Orders",
+  "purchase_price_column": "Purchase Price",
+  "quantity_column": "quan",
+  "allocation_basis": "purchase_price",
+  "allocation_rules": {
+    "positive_purchase_price": "allocated",
+    "zero_purchase_price": "unallocated",
+    "blank_negative_or_invalid_purchase_price": "needs_review"
+  },
+  "order_scope": "all_recorded_orders_with_no_date_or_cancellation_exclusions",
+  "dashboard_type": "separate_read_only_website",
+  "default_allocation_filter": "unallocated",
+  "group_orders": false,
+  "notes": "User confirmed purchase price determines allocation; do not use the Allocation text column. One source order per displayed row, with match and section filters. No dashboard tab is created in the spreadsheet."
+}

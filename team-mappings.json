@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "matching": "trim_and_casefold",
+  "unknown_names": "leave_unchanged_and_flag",
+  "mappings": {
+    "Arsenal": "afc",
+    "Aston Villa": "avfc",
+    "Bournemouth": "afcb",
+    "Bradford City": "bradford",
+    "Brentford": "bfc",
+    "Brighton & Hove Albion": "bhafc",
+    "Chelsea": "cfc",
+    "Crystal Palace": "cpfc",
+    "Fulham": "ffc",
+    "Hull": "hull",
+    "Hull City": "hull",
+    "Ipswich": "ipswich",
+    "Ipswich Town": "ipswich",
+    "Leeds United": "lufc",
+    "Liverpool": "lfc",
+    "Manchester City": "mcfc",
+    "Manchester United": "mufc",
+    "Napoli": "napoli",
+    "Newcastle United": "nufc",
+    "Nottingham Forest": "nffc",
+    "Sabah FK": "sabah",
+    "Sabah FC": "sabah",
+    "spurs": "thfc",
+    "Tottenham Hotspur": "thfc",
+    "Tottenham": "thfc",
+    "s Hull": "hull"
+  }
+}
