@@ -24,14 +24,19 @@ still apply; no deployment has been performed by this setup task.
    and the Gunicorn start command. Keep one replica and one worker: sessions
    are currently stored in memory. Multiple replicas require a shared session
    store. The configured process supports four request threads.
-2. Generate a Railway public domain, or attach your own domain.
+2. Generate a Railway public domain with target port 8080, or attach your own
+   domain. Add `PORT=8080` to service variables to match that routing port.
+   The app starts and serves its health check even before a domain is configured.
+   Google connection becomes available after a domain is configured.
 3. In the Railway service's Variables, set:
-   - `APP_BASE_URL`: the exact HTTPS origin, with no path.
+   - `APP_BASE_URL`: the exact HTTPS origin, with no path. This is optional for a
+     generated Railway domain: the app uses Railway's `RAILWAY_PUBLIC_DOMAIN`
+     automatically. Set it explicitly when using a custom domain.
    - `GOOGLE_CLIENT_ID`: the OAuth **web application** client ID ending in
      `.apps.googleusercontent.com`.
    - `GOOGLE_CLIENT_SECRET`: the corresponding OAuth client secret.
    - Optional `GOOGLE_SHEET_ID`: the spreadsheet ID. The current spreadsheet is
-     already the default. Railway supplies `PORT`; do not hard-code it.
+     already the default.
 4. In Google Auth Platform → Clients → that web client, register the exact
    `APP_BASE_URL` followed by `/oauth/callback` under Authorized redirect URIs.
    Do not include a trailing slash after callback. No JavaScript origin is

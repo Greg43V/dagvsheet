@@ -9,9 +9,12 @@ from orders import read_orders
 
 def create_website(connection=None):
     origin = os.getenv('APP_BASE_URL')
-    if connection is None and not origin:
-        raise RuntimeError('Set APP_BASE_URL to the website HTTPS origin (or your local development origin).')
-    connection = connection or App(origin)
+    if not origin and os.getenv('RAILWAY_PUBLIC_DOMAIN'):
+        origin = 'https://' + os.environ['RAILWAY_PUBLIC_DOMAIN']
+    origin_configured = connection is not None or bool(origin)
+    # Allow Railway's first deployment and health check before a domain exists.
+    # Never infer OAuth redirects from an untrusted incoming Host header.
+    connection = connection or App(origin or 'http://127.0.0.1:8000')
     site = Flask(__name__, static_folder=None)
     site.config['MAX_CONTENT_LENGTH'] = 4096
 
@@ -51,6 +54,9 @@ def create_website(connection=None):
 
     @site.get('/connect')
     def connect():
+        if not origin_configured:
+            g.browser['error'] = 'Generate a Railway domain or set APP_BASE_URL before connecting Google.'
+            return redirect('/', code=303)
         return redirect(connection.authorize(g.browser), code=303)
 
     @site.get('/oauth/callback')

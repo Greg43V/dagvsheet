@@ -1,4 +1,5 @@
 import time
+import os
 import unittest
 from unittest.mock import patch
 
@@ -115,6 +116,29 @@ class WebsiteTests(unittest.TestCase):
         self.assertTrue(response.headers['Location'].startswith('https://accounts.google.com/'))
         self.assertIn('code_challenge=', response.headers['Location'])
         self.assertIn('state=', response.headers['Location'])
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_first_deployment_starts_before_public_domain_configuration(self):
+        client = create_website().test_client()
+        self.assertEqual(client.get('/healthz').status_code, 200)
+        self.assertEqual(client.get('/api/orders').status_code, 401)
+        self.assertEqual(client.get('/connect').headers['Location'], '/')
+        self.assertIn('Generate a Railway domain', client.get('/api/status').json['error'])
+
+    @patch.dict(os.environ, {'RAILWAY_PUBLIC_DOMAIN': 'buying-desk.up.railway.app',
+                             'GOOGLE_CLIENT_ID': 'test-id', 'GOOGLE_CLIENT_SECRET': 'test-secret'}, clear=True)
+    def test_railway_domain_automatically_configures_https_callback(self):
+        client = create_website().test_client()
+        response = client.get('/connect')
+        self.assertIn('https%3A%2F%2Fbuying-desk.up.railway.app%2Foauth%2Fcallback', response.headers['Location'])
+        self.assertIn('Secure', response.headers['Set-Cookie'])
+
+    @patch.dict(os.environ, {'APP_BASE_URL': 'https://orders.example.com',
+                             'RAILWAY_PUBLIC_DOMAIN': 'buying-desk.up.railway.app',
+                             'GOOGLE_CLIENT_ID': 'test-id', 'GOOGLE_CLIENT_SECRET': 'test-secret'}, clear=True)
+    def test_explicit_custom_domain_takes_precedence(self):
+        response = create_website().test_client().get('/connect')
+        self.assertIn('https%3A%2F%2Forders.example.com%2Foauth%2Fcallback', response.headers['Location'])
 
 
 if __name__ == '__main__':
