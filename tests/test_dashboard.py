@@ -117,6 +117,25 @@ class WebsiteTests(unittest.TestCase):
         self.assertIn('code_challenge=', response.headers['Location'])
         self.assertIn('state=', response.headers['Location'])
 
+    def test_missing_credentials_return_to_dashboard_and_name_only_missing_fields(self):
+        for values, expected in [
+            ({}, ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']),
+            ({'GOOGLE_CLIENT_ID': 'test-client-id'}, ['GOOGLE_CLIENT_SECRET']),
+            ({'GOOGLE_CLIENT_SECRET': 'test-secret-value'}, ['GOOGLE_CLIENT_ID']),
+        ]:
+            with self.subTest(expected=expected), patch.dict(os.environ, values, clear=True), patch('app.Path.is_file', return_value=False):
+                client = create_website(App('https://dashboard.example')).test_client()
+                response = client.get('/connect')
+                self.assertEqual(response.status_code, 303)
+                self.assertEqual(response.headers['Location'], '/')
+                message = client.get('/api/status').json['error']
+                for name in expected:
+                    self.assertIn(name, message)
+                for name in {'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'} - set(expected):
+                    self.assertNotIn(name, message)
+                self.assertNotIn('test-secret-value', message)
+                self.assertEqual(client.get('/api/orders').status_code, 401)
+
     @patch.dict(os.environ, {}, clear=True)
     def test_first_deployment_starts_before_public_domain_configuration(self):
         client = create_website().test_client()

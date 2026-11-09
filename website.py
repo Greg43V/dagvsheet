@@ -57,7 +57,11 @@ def create_website(connection=None):
         if not origin_configured:
             g.browser['error'] = 'Generate a Railway domain or set APP_BASE_URL before connecting Google.'
             return redirect('/', code=303)
-        return redirect(connection.authorize(g.browser), code=303)
+        try:
+            return redirect(connection.authorize(g.browser), code=303)
+        except ConnectionError as error:
+            g.browser['error'] = str(error)
+            return redirect('/', code=303)
 
     @site.get('/oauth/callback')
     def callback():

@@ -54,7 +54,9 @@ def load_credentials():
         value = json.loads(path.read_text())
         if value.get('client_id') and value.get('client_secret'):
             return value
-    raise ConnectionError('Google credentials are missing from this server.')
+    missing = [name for name, value in [('GOOGLE_CLIENT_ID', client_id), ('GOOGLE_CLIENT_SECRET', client_secret)] if not value]
+    raise ConnectionError('Google sign-in is not configured. Add ' + ' and '.join(missing) +
+                          ' in this Railway service\'s Variables, then apply the changes and redeploy.')
 
 
 class App:
