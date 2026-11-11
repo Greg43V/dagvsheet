@@ -5,9 +5,9 @@
 The separate, read-only buying dashboard is implemented in `website.py`,
 `orders.py`, and `dashboard/`. It lists each Grove Orders row individually,
 with match/section/allocation filters and order totals. Deployment files target
-the user's existing Railway subscription; see RAILWAY.md. No website deployment
-has been performed yet. Google browser authorization on the deployed domain is
-still required. The older Mac download is a connection starter, not this website.
+the user's existing Railway subscription; see RAILWAY.md. The existing production
+address is `https://dagvsheet-production.up.railway.app`. Google browser authorization
+on that domain is required. The older Mac download is a connection starter, not this website.
 
 The dashboard uses the signed-in user's read-only access. It does not edit cells
 or invoke the manual team-mapping writer. Order data is not served before sign-in.
@@ -15,7 +15,14 @@ or invoke the manual team-mapping writer. Order data is not served before sign-i
 First milestone: securely authorize Google and preview the selected private tab.
 The browser starter requests read-only Google access. The cloud service-account
 workflow additionally supports explicitly approved team-name replacements with
-an audit trail. No AI model or automatic background schedule is configured.
+an audit trail. No AI model or automatic team-mapping schedule is configured.
+
+The Live Profit view reads the figure in `Live Profit!B1`. With persistent storage
+and the existing shared service-account credential configured in Railway, it saves
+Monday and first-of-month snapshots at 00:00 SAST. Weekly and monthly comparisons
+each use their own preceding saved capture. Setup, retry, persistence, and missed-date
+behavior are documented in RAILWAY.md. This schedule only reads Sheets; team mappings
+remain manual. Tests use synthetic figures and do not create production history.
 
 The cloud service-account workflow also has saved lowercase team mappings and
 a non-writing replacement preview. See SERVICE_ACCOUNT.md, team-mappings.json,

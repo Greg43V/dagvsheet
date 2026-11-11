@@ -45,13 +45,57 @@ still apply; no deployment has been performed by this setup task.
    and verify the order table. The signed-in Google account must be able to
    read the spreadsheet. A successful health check is not a sign-in check.
 
-Do not paste credentials into GitHub files or chat. The website uses the signed-in
-user's read-only Google token; it does not need your service account JSON. Do not
-copy that JSON into Railway. Access tokens remain on the server and are not
+Do not paste credentials into GitHub files or chat. Interactive views use the signed-in
+user's read-only Google token. Optional unattended profit snapshots use the existing
+shared service account configured securely as described below. Access tokens remain on the server and are not
 returned to browser JavaScript. Users sign in again after token expiry (about an
 hour), restart, or redeployment. Logs exclude URL access records to avoid recording
 OAuth callback codes. A public page may load the sign-in screen; private API
 responses require a valid Google-authorized session and Google sheet permission.
+
+## Live Profit snapshots
+
+The Live Profit view reads `Live Profit!B1` (tab ID `1787939114`), checking that A1
+still says `Profit`. Browser users must sign in and retain permission to read that
+source before they can see the figure or its saved history.
+
+For unattended snapshots in the **existing Railway production service**:
+
+1. Attach a persistent Railway volume mounted at `/data`. Set
+   `SNAPSHOT_DB_PATH=/data/live-profit.sqlite3` in the service Variables. When
+   omitted, the app also recognizes Railway's `RAILWAY_VOLUME_MOUNT_PATH` and
+   places `live-profit.sqlite3` there. Never use ephemeral container storage for
+   history. Keep volume backups enabled according to your retention needs.
+2. Add `GOOGLE_SERVICE_ACCOUNT_JSON` through Railway's secure Variables UI, using
+   the existing service account documented in SERVICE_ACCOUNT.md. It must contain
+   the actual full JSON, not a proxy placeholder. Reuse a current saved credential;
+   do not put it in source files or chat. The account must be able to read the
+   spreadsheet. The scheduler requests **only the read-only Sheets scope**.
+3. Apply variables and deploy the current `main`. Keep **one replica and one
+   Gunicorn worker**, and turn off Railway service sleeping/serverless mode so
+   the process remains available for the schedule. No separate cron service is
+   needed: the existing web process checks once a minute in a background thread.
+4. Sign in, open **Live Profit**, and confirm that automatic snapshots show as
+   scheduled. The first capture occurs on the next Monday or month start.
+
+The target is 00:00 **Africa/Johannesburg (SAST, UTC+2)** every Monday and on the
+first of every month. If the process starts or a read recovers later on a due
+date, it captures then and records the actual capture time. Failed reads retry
+each minute that day. Whole missed dates are not backfilled using a later figure.
+When both schedules coincide, one stored capture serves both comparisons. A
+unique spreadsheet/date key prevents overwrites after restarts or duplicate ticks.
+
+History shows each Monday against its previous saved Monday and each month start
+against its previous monthly capture, with prior date/value, GBP change, and
+percentage change. The first capture is a baseline; zero baselines have no
+percentage. For negative baselines, percentage uses the absolute prior value.
+Values are preserved at source precision and displayed as GBP to two decimals.
+
+Missing storage or credentials leaves automatic snapshots disabled and visibly
+marked as needing setup; browser-authorized figures and orders remain available.
+The scheduler never imports or invokes `team_apply.py` and never writes to Sheets.
+Codex environment settings and Railway production variables are separate: changing
+one does not configure the other.
 
 ## Local development and verification
 

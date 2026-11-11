@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 const gbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 2 });
 const integer = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 2 });
 let orders = [], loaded = false, connected = false, visible = 75, fetchedAt = null;
+let activeView = 'buying', profitRequest = 0;
 const controls = ['match', 'section', 'allocation', 'search', 'clear', 'sort'];
 const money = value => value == null ? '—' : gbp.format(value);
 const matchKey = order => JSON.stringify([order.home, order.away]);
@@ -21,6 +22,7 @@ function connection(value) {
   document.querySelector('.sidebarfoot').classList.toggle('connected', value);
   $('refresh').disabled = !value;
   controls.forEach(id => $(id).disabled = !value || !loaded);
+  if (!value) clearProfit();
 }
 function options(id, pairs, first) {
   const selected = $(id).value;
@@ -71,7 +73,7 @@ function render() {
   $('selection').textContent = loaded ? `${label} · ${status}` : 'Connect your sheet to view orders.';
   $('orderrows').replaceChildren();
   selected.slice(0, visible).forEach(order => {
-    const tr = element('tr');
+    const tr = element('tr', null, `order-row ${order.status}`);
     const identifier = element('td');
     identifier.append(sourceLink(order, order.orderNumber || order.orderId || `Row ${order.sourceRow}`, 'orderlink'));
     if (order.orderId && order.orderId !== order.orderNumber) identifier.append(element('small', order.orderId, 'orderid'));
@@ -82,9 +84,10 @@ function render() {
     tr.append(element('td', order.section || 'Unspecified', 'category'));
     const qty = element('td', order.quantity == null ? '—' : integer.format(order.quantity), 'numeric qty');
     if (order.issues.length) { const flag = element('span', '⚑', 'issue'); flag.title = order.issues.join(' · '); flag.setAttribute('aria-label', flag.title); qty.append(flag); }
-    tr.append(qty, element('td', money(order.unitPrice), 'numeric'), element('td', money(order.totalSales), 'numeric moneytotal'));
+    tr.append(qty, element('td', money(order.unitPrice), 'numeric unitprice'), element('td', money(order.totalSales), 'numeric moneytotal'));
     const allocation = element('td'); allocation.append(element('span', { unallocated: 'Unallocated', allocated: 'Allocated', review: 'Needs review' }[order.status], `badge ${order.status}`)); tr.append(allocation);
     const source = element('td'); const link = sourceLink(order, 'Open', 'source-link'); link.setAttribute('aria-label', `Open source row ${order.sourceRow}`); source.append(link); tr.append(source);
+    ['Order', 'Match', 'Section / category', 'Quantity', 'Unit sale', 'Total sales', 'Allocation', 'Source'].forEach((label, index) => tr.children[index].dataset.label = label);
     $('orderrows').append(tr);
   });
   $('empty').hidden = selected.length > 0;
@@ -113,7 +116,84 @@ async function refresh() {
 ['section', 'sort'].forEach(id => $(id).addEventListener('change', () => { visible = 75; render(); }));
 $('search').addEventListener('input', () => { visible = 75; render(); });
 $('more').addEventListener('click', () => { visible += 75; render(); });
-$('refresh').addEventListener('click', refresh);
+function clearProfit() {
+  profitRequest++;
+  $('profit-value').textContent = '—';
+  $('profit-change').textContent = '—';
+  $('profit-change').className = '';
+  $('profit-updated').textContent = 'Awaiting connection';
+  $('profit-baseline').textContent = 'No snapshot available yet';
+  $('profit-history').replaceChildren();
+  $('profit-empty').hidden = false;
+  $('profit-status').textContent = 'Sign in to view the current figure and snapshot history.';
+}
+function signedMoney(value) { return `${Number(value) > 0 ? '+' : ''}${money(Number(value))}`; }
+function changeClass(value) { return Number(value) > 0 ? 'positive' : Number(value) < 0 ? 'negative' : ''; }
+async function refreshProfit() {
+  if (!connected) return;
+  const requestId = ++profitRequest;
+  $('refresh').disabled = true;
+  $('profit-status').textContent = 'Refreshing Live Profit…';
+  try {
+    const data = await api('/api/profit');
+    if (requestId !== profitRequest || !connected) return;
+    const { figure, snapshots } = data;
+    $('profit-value').textContent = money(Number(figure.value));
+    $('profit-updated').textContent = `Read ${new Date(figure.fetchedAt).toLocaleString('en-GB', { timeZone: 'Africa/Johannesburg' })} SAST`;
+    const latest = snapshots.history[0];
+    const delta = latest ? Number(figure.value) - Number(latest.value) : null;
+    $('profit-change').textContent = delta == null ? '—' : signedMoney(delta);
+    $('profit-change').className = delta == null ? '' : changeClass(delta);
+    $('profit-baseline').textContent = latest ? `Compared with ${latest.date} · ${money(Number(latest.value))}` : 'The first scheduled capture establishes your baseline';
+    $('profit-status').textContent = {
+      setup_required: 'Automatic snapshots need setup. The current figure is available; saved history is shown below.',
+      retrying: 'The last snapshot attempt failed. Retrying every minute; existing history is preserved.',
+      storage_error: 'Snapshot storage is unavailable. The current figure is available; history could not be loaded.',
+      scheduled: `Automatic snapshots are scheduled. Next scheduled date: ${snapshots.nextDate} (SAST).`
+    }[snapshots.state] || 'Snapshot status unavailable.';
+    $('profit-history').replaceChildren();
+    snapshots.history.forEach(snapshot => snapshot.kinds.forEach(kind => {
+      const comparison = snapshot.comparisons[kind];
+      const row = element('tr');
+      const date = element('td', snapshot.date);
+      date.append(element('small', `Captured ${new Date(snapshot.capturedAt).toLocaleString('en-GB', { timeZone: 'Africa/Johannesburg' })} SAST`, 'capture-time'));
+      row.append(date, element('td', kind === 'weekly' ? 'Monday' : 'Month start'),
+        element('td', money(Number(snapshot.value)), 'numeric moneytotal'),
+        element('td', comparison.previousValue == null ? '—' : `${money(Number(comparison.previousValue))} (${comparison.previousDate})`, 'numeric'),
+        element('td', comparison.change == null ? 'First snapshot' : signedMoney(comparison.change), `numeric ${comparison.change == null ? '' : changeClass(comparison.change)}`),
+        element('td', comparison.changePercent == null ? '—' : `${Number(comparison.changePercent) > 0 ? '+' : ''}${integer.format(Number(comparison.changePercent))}%`, 'numeric'));
+      ['Snapshot date (SAST)', 'Schedule', 'Profit', 'Previous profit', 'Change', 'Change %'].forEach((label, index) => row.children[index].dataset.label = label);
+      $('profit-history').append(row);
+    }));
+    $('profit-empty').hidden = snapshots.history.length > 0;
+  } catch (error) {
+    if (requestId !== profitRequest) return;
+    if (error.code === 'sign_in_required') { orders = []; loaded = false; connection(false); render(); }
+    else $('profit-status').textContent = 'Refresh failed. Any previously displayed figures may be out of date.';
+    notice(error.message);
+  } finally { if (requestId === profitRequest || !connected) $('refresh').disabled = !connected; }
+}
+function selectView(view) {
+  activeView = view;
+  ['buying', 'profit'].forEach(name => {
+    const selected = name === view;
+    $(`${name}-panel`).hidden = !selected;
+    $(`${name}-tab`).setAttribute('aria-selected', String(selected));
+    $(`${name}-tab`).tabIndex = selected ? 0 : -1;
+  });
+  $('refresh').replaceChildren(element('span', '↻'), document.createTextNode(view === 'profit' ? ' Refresh profit' : ' Refresh orders'));
+  if (view === 'profit') refreshProfit();
+}
+['buying', 'profit'].forEach(view => {
+  $(`${view}-tab`).addEventListener('click', () => selectView(view));
+  $(`${view}-tab`).addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 'buying' : event.key === 'End' ? 'profit' : view === 'buying' ? 'profit' : 'buying';
+    selectView(next); $(`${next}-tab`).focus();
+  });
+});
+$('refresh').addEventListener('click', () => activeView === 'profit' ? refreshProfit() : refresh());
 $('clear').addEventListener('click', () => { $('match').value = ''; $('allocation').value = 'unallocated'; $('search').value = ''; $('sort').value = 'source'; $('section').value = ''; visible = 75; rebuildSections(); render(); });
 $('disconnect').addEventListener('click', async () => { try { await api('/disconnect', { method: 'POST' }); orders = []; loaded = false; connection(false); render(); window.location.replace('/'); } catch (error) { notice(error.message); } });
 (async () => {

@@ -1,13 +1,15 @@
 """Railway website. Read-only, Google-authorized access per browser session."""
 import os
+import sqlite3
 import time
 from flask import Flask, g, jsonify, redirect, request, send_from_directory
 
 from app import App, ConnectionError, ROOT, google_json
 from orders import read_orders
+from profit import configured_snapshots, read_profit
 
 
-def create_website(connection=None):
+def create_website(connection=None, snapshots=None):
     origin = os.getenv('APP_BASE_URL')
     if not origin and os.getenv('RAILWAY_PUBLIC_DOMAIN'):
         origin = 'https://' + os.environ['RAILWAY_PUBLIC_DOMAIN']
@@ -17,6 +19,8 @@ def create_website(connection=None):
     connection = connection or App(origin or 'http://127.0.0.1:8000')
     site = Flask(__name__, static_folder=None)
     site.config['MAX_CONTENT_LENGTH'] = 4096
+    snapshots = snapshots or configured_snapshots(connection.sheet_id, site.logger)
+    snapshots.start()
 
     @site.before_request
     def identify_browser():
@@ -78,6 +82,20 @@ def create_website(connection=None):
             return jsonify(error='Sign in with Google to view your orders.', code='sign_in_required'), 401
         token = g.browser['token']
         return jsonify(read_orders(lambda url: google_json(url, token=token), spreadsheet_id=connection.sheet_id))
+
+    @site.get('/api/profit')
+    def profit():
+        if not g.browser.get('token') or g.browser.get('token_expires', 0) <= time.time():
+            g.browser.pop('token', None)
+            return jsonify(error='Sign in with Google to view Live Profit.', code='sign_in_required'), 401
+        # Check this browser's access to the actual source before returning history.
+        figure = read_profit(lambda url: google_json(url, token=g.browser['token']),
+                             spreadsheet_id=connection.sheet_id)
+        try:
+            schedule = snapshots.summary()
+        except (OSError, sqlite3.Error):
+            schedule = {'state': 'storage_error', 'timezone': 'Africa/Johannesburg', 'history': []}
+        return jsonify(figure=figure, snapshots=schedule)
 
     @site.post('/disconnect')
     def disconnect():
