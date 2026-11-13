@@ -3,6 +3,7 @@ const gbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP',
 const integer = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 2 });
 let orders = [], loaded = false, connected = false, visible = 75, fetchedAt = null;
 let activeView = 'buying', profitRequest = 0;
+let ordersRefreshing = false, copyingOrders = false;
 const controls = ['match', 'section', 'allocation', 'search', 'clear', 'sort'];
 const money = value => value == null ? '—' : gbp.format(value);
 const matchKey = order => JSON.stringify([order.home, order.away]);
@@ -22,7 +23,13 @@ function connection(value) {
   document.querySelector('.sidebarfoot').classList.toggle('connected', value);
   $('refresh').disabled = !value;
   controls.forEach(id => $(id).disabled = !value || !loaded);
-  if (!value) clearProfit();
+  if (!value) {
+    clearProfit();
+    $('copy-dialog').close();
+    $('copy-text').value = '';
+    $('copy-status').textContent = '';
+  }
+  updateCopyButton();
 }
 function options(id, pairs, first) {
   const selected = $(id).value;
@@ -50,6 +57,45 @@ function selectedOrders() {
   const field = $('sort').value;
   if (field !== 'source') selected.sort((a, b) => (b[field] ?? -Infinity) - (a[field] ?? -Infinity) || a.sourceRow - b.sourceRow);
   return selected;
+}
+function unallocatedForCopy() {
+  return selectedOrders().filter(order => order.status === 'unallocated');
+}
+function updateCopyButton() {
+  const count = connected && loaded && $('match').value ? unallocatedForCopy().length : 0;
+  $('copy-unallocated').disabled = !count || ordersRefreshing || copyingOrders;
+  $('copy-unallocated').textContent = count ? `Copy unallocated (${integer.format(count)})` : 'Copy unallocated';
+  $('copy-hint').textContent = !connected || !loaded ? 'Load your orders and choose a match to copy.'
+    : ordersRefreshing ? 'Refreshing orders…'
+    : !$('match').value ? 'Choose a match to copy its unallocated orders.'
+    : count ? 'Section · Qty · Unit sale price. Copies all matching rows.'
+    : 'No unallocated orders match these filters.';
+}
+async function copyUnallocated() {
+  if (!connected || !loaded || !$('match').value || ordersRefreshing || copyingOrders) return;
+  const selected = unallocatedForCopy();
+  if (!selected.length) return;
+  const text = selected.map(order => [
+    (order.section || 'Unspecified').replace(/\s+/g, ' ').trim(),
+    order.quantity == null ? '—' : integer.format(order.quantity),
+    money(order.unitPrice)
+  ].join(' | ')).join('\n');
+  copyingOrders = true;
+  updateCopyButton();
+  $('copy-status').textContent = '';
+  try {
+    await navigator.clipboard.writeText(text);
+    if (connected && loaded) $('copy-status').textContent = `Copied ${integer.format(selected.length)} unallocated order${selected.length === 1 ? '' : 's'}.`;
+  } catch (_) {
+    if (!connected || !loaded) return;
+    $('copy-text').value = text;
+    $('copy-dialog').showModal();
+    $('copy-text').focus();
+    $('copy-text').select();
+  } finally {
+    copyingOrders = false;
+    updateCopyButton();
+  }
 }
 function element(tag, text, className) { const node = document.createElement(tag); if (text != null) node.textContent = text; if (className) node.className = className; return node; }
 function sourceLink(order, label, className) { const link = element('a', label, className); link.href = order.sourceUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; return link; }
@@ -95,8 +141,12 @@ function render() {
   $('empty-description').textContent = loaded ? 'Try another match, section, or allocation status.' : 'Connect your Google account to see your orders.';
   $('showing').textContent = loaded ? `Showing ${Math.min(visible, selected.length)} of ${integer.format(selected.length)} orders` : 'No orders loaded';
   $('more').hidden = selected.length <= visible;
+  $('copy-status').textContent = '';
+  updateCopyButton();
 }
 async function refresh() {
+  ordersRefreshing = true;
+  updateCopyButton();
   $('refresh').disabled = true;
   $('updated').textContent = 'Refreshing…';
   try {
@@ -110,12 +160,14 @@ async function refresh() {
     if (error.code === 'sign_in_required') { orders = []; loaded = false; connection(false); render(); }
     notice(error.message);
     $('updated').textContent = fetchedAt ? 'Refresh failed · previous data shown' : 'Could not load orders';
-  } finally { $('refresh').disabled = !connected; }
+  } finally { ordersRefreshing = false; updateCopyButton(); $('refresh').disabled = !connected; }
 }
 ['match', 'allocation'].forEach(id => $(id).addEventListener('change', () => { visible = 75; rebuildSections(); render(); }));
 ['section', 'sort'].forEach(id => $(id).addEventListener('change', () => { visible = 75; render(); }));
 $('search').addEventListener('input', () => { visible = 75; render(); });
 $('more').addEventListener('click', () => { visible += 75; render(); });
+$('copy-unallocated').addEventListener('click', copyUnallocated);
+$('copy-close').addEventListener('click', () => $('copy-dialog').close());
 function clearProfit() {
   profitRequest++;
   $('profit-value').textContent = '—';

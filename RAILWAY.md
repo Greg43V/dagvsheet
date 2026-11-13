@@ -13,6 +13,10 @@ still apply; no deployment has been performed by this setup task.
 - Purchase Price zero means unallocated; positive means allocated; other values
   are flagged for review. The Allocation text column does not determine status.
 - Original order links and a read-only refresh button. No background writer.
+- Select a match and use **Copy unallocated** to copy every matching unallocated
+  order as `Section | Qty | £unit sale price`. Section/search filters and sorting
+  apply, including orders beyond the displayed page. Order IDs and match details
+  are omitted. A manual-copy dialog is available if browser clipboard access fails.
 - Team names use saved mappings for display only; the dashboard does not modify
   the sheet. All dates/orders are included; cancellations are not inferred.
 
